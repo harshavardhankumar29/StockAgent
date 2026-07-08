@@ -1,0 +1,32 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ResearchHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  companyName     String
+  ticker          String
+  decision        String
+  confidenceScore Int
+  reasoning       String
+  keyMetrics      String   // stored as JSON string
+  bullPoints      String   // stored as JSON string
+  bearPoints      String   // stored as JSON string
+  financialHealth String?
+  moatStrength    String?
+  growthProspects String?
+  riskLevel       String?
+  timeHorizon     String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+}
