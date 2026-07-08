@@ -63,10 +63,17 @@ export default function Home() {
             Market News
           </Link>
           <Show when="signed-in">
+            <Link href="/watchlist" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
+              Watchlist
+            </Link>
+            <Link href="/portfolio" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
+              Portfolio
+            </Link>
             <Link href="/history" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
               History
             </Link>
           </Show>
+
           <div className="flex items-center gap-3">
             <Show when="signed-out">
               <SignInButton mode="modal">

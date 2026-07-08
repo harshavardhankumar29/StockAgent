@@ -11,22 +11,49 @@ datasource db {
 }
 
 model ResearchHistory {
-  id              String   @id @default(uuid())
-  userId          String
-  companyName     String
-  ticker          String
-  decision        String
-  confidenceScore Int
-  reasoning       String
-  keyMetrics      String   // stored as JSON string
-  bullPoints      String   // stored as JSON string
-  bearPoints      String   // stored as JSON string
-  financialHealth String?
-  moatStrength    String?
-  growthProspects String?
-  riskLevel       String?
-  timeHorizon     String?
-  createdAt       DateTime @default(now())
+  id                String   @id @default(uuid())
+  userId            String
+  companyName       String
+  ticker            String
+  decision          String
+  confidenceScore   Int
+  reasoning         String
+  keyMetrics        String   // stored as JSON string
+  bullPoints        String   // stored as JSON string
+  bearPoints        String   // stored as JSON string
+  financialHealth   String?
+  moatStrength      String?
+  growthProspects   String?
+  riskLevel         String?
+  timeHorizon       String?
+  chartData         String?  // stored as JSON string of 90-day prices
+  competitorMetrics String?  // stored as JSON string of competitor financials
+  critique          String?  // stored as text
+  createdAt         DateTime @default(now())
 
   @@index([userId])
 }
+
+model Watchlist {
+  id          String   @id @default(uuid())
+  userId      String
+  ticker      String
+  companyName String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, ticker])
+}
+
+model PortfolioTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  ticker      String
+  companyName String
+  type        String   // "BUY" or "SELL"
+  shares      Float
+  price       Float
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+

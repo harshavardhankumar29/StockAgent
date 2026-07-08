@@ -30,7 +30,11 @@ export interface DecisionData {
     freeCashFlow: string;
     analystRating: string;
   };
+  chartData?: string;
+  competitorMetrics?: string;
+  critique?: string;
 }
+
 
 export interface ProgressStep {
   step: string;

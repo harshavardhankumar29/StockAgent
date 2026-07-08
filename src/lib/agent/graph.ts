@@ -5,9 +5,15 @@ import yahooFinance from "yahoo-finance2";
 import { QualitativeDecisionSchema } from "./schemas";
 import type { FullDecision } from "./schemas";
 import { cached } from "@/lib/cache";
+import {
+  calculateDCF,
+  calculateSMA,
+  calculateRSI,
+  calculateMACD
+} from "./financialAnalysis";
 
 // ─────────────────────────────────────────────
-// Module-level singleton LLM (issue #5: was re-instantiated every call)
+// Module-level singleton LLM
 // ─────────────────────────────────────────────
 const llm = new ChatGroq({
   apiKey: process.env.GROQ_API_KEY,
@@ -25,12 +31,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function backoffMs(attempt: number, baseMs = 3000): number {
   const exponential = baseMs * Math.pow(2, attempt);
   const jitter = Math.random() * 1000;
-  return Math.min(exponential + jitter, 60_000); // cap at 60s
+  return Math.min(exponential + jitter, 60_000);
 }
 
 /**
  * Invoke Groq with automatic retry on transient errors.
- * Handles 429 rate limits, 5xx server errors, and network timeouts.
  */
 async function callLLM(prompt: string, retries = 5): Promise<string> {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -54,7 +59,6 @@ async function callLLM(prompt: string, retries = 5): Promise<string> {
       if (isTransient && attempt < retries) {
         let wait: number;
         if (isRateLimit) {
-          // Groq often tells us how long to wait
           const match = msg.match(/try again in (\d+\.?\d*)s/);
           wait = match
             ? (Math.ceil(parseFloat(match[1])) + 3) * 1000
@@ -74,8 +78,22 @@ async function callLLM(prompt: string, retries = 5): Promise<string> {
   throw new Error("Max retries exceeded for LLM call");
 }
 
+// Helper to format values
+function fmt(val: unknown, suffix = "", decimals = 2): string {
+  if (val === null || val === undefined || val === "") return "N/A";
+  const num = Number(val);
+  if (isNaN(num)) return String(val);
+  if (suffix === "$" && Math.abs(num) >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+  if (suffix === "$" && Math.abs(num) >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+  if (suffix === "$" && Math.abs(num) >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+  if (suffix === "$") return `$${num.toFixed(decimals)}`;
+  if (suffix === "%") return `${(num * 100).toFixed(decimals)}%`;
+  if (suffix === "x") return `${num.toFixed(decimals)}x`;
+  return num.toFixed(decimals) + suffix;
+}
+
 // ─────────────────────────────────────────────
-// Direct data fetchers — wrapped in TTL cache (issue #7a)
+// Direct data fetchers
 // ─────────────────────────────────────────────
 
 /** Look up ticker symbol via Yahoo Finance */
@@ -109,14 +127,14 @@ async function fetchTicker(companyName: string): Promise<string> {
   });
 }
 
-/** Get financial data from Yahoo Finance — returns structured JSON */
+/** Get financial data from Yahoo Finance */
 async function fetchFinancials(ticker: string): Promise<string> {
   return cached(`financials:${ticker.toUpperCase()}`, async () => {
     try {
       const yf = new yahooFinance();
       const quote = await yf.quote(ticker);
       const summary = await yf.quoteSummary(ticker, {
-        modules: ["summaryProfile", "financialData"],
+        modules: ["summaryProfile", "financialData", "defaultKeyStatistics"],
       });
       return JSON.stringify({
         symbol: quote.symbol,
@@ -129,8 +147,12 @@ async function fetchFinancials(ticker: string): Promise<string> {
         revenueGrowth: summary.financialData?.revenueGrowth,
         profitMargin: summary.financialData?.profitMargins,
         debtToEquity: summary.financialData?.debtToEquity,
-        freeCashFlow: summary.financialData?.freeCashflow,
-        returnOnEquity: summary.financialData?.returnOnEquity,
+        freeCashflow: summary.financialData?.freeCashflow,
+        operatingCashflow: summary.financialData?.operatingCashflow,
+        totalCash: summary.financialData?.totalCash,
+        totalDebt: summary.financialData?.totalDebt,
+        beta: summary.defaultKeyStatistics?.beta,
+        sharesOutstanding: summary.defaultKeyStatistics?.sharesOutstanding,
         recommendationKey: summary.financialData?.recommendationKey,
         sector: summary.summaryProfile?.sector,
         industry: summary.summaryProfile?.industry,
@@ -143,6 +165,86 @@ async function fetchFinancials(ticker: string): Promise<string> {
         e instanceof Error ? e.message : e
       );
       return JSON.stringify({ error: "Financial data unavailable", symbol: ticker });
+    }
+  });
+}
+
+/** Fetch historical price charts and calculate indicators */
+async function fetchChartAndIndicators(ticker: string) {
+  return cached(`chart-indicators:${ticker.toUpperCase()}`, async () => {
+    try {
+      const yf = new yahooFinance();
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      
+      const chartData = await yf.chart(ticker, {
+        period1: oneYearAgo.toISOString().split("T")[0],
+        interval: "1d"
+      });
+      
+      const quotes = chartData.quotes || [];
+      const closePrices = quotes.map(q => q.close).filter((p): p is number => typeof p === "number");
+      
+      const sma50 = calculateSMA(closePrices, 50);
+      const sma200 = calculateSMA(closePrices, 200);
+      const rsi14 = calculateRSI(closePrices, 14);
+      const macd = calculateMACD(closePrices);
+      
+      // Filter to the last 90 trading days for the frontend SVG chart
+      const last90Quotes = quotes.slice(-90).map(q => ({
+        date: q.date ? new Date(q.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '',
+        close: q.close ? Number(q.close.toFixed(2)) : 0
+      })).filter(q => q.close > 0);
+      
+      return {
+        sma50,
+        sma200,
+        rsi14,
+        macd: macd ? `${macd.macd} (Signal: ${macd.signal}) - ${macd.sentiment}` : "N/A",
+        chartPoints: JSON.stringify(last90Quotes)
+      };
+    } catch (e) {
+      console.warn("⚠️ Failed to fetch chart/indicators:", e);
+      return {
+        sma50: "N/A",
+        sma200: "N/A",
+        rsi14: "N/A",
+        macd: "N/A",
+        chartPoints: "[]"
+      };
+    }
+  });
+}
+
+/** Fetch insider transactions and institutional holdings */
+async function fetchInsiderAndInstitutions(ticker: string) {
+  return cached(`insiders:${ticker.toUpperCase()}`, async () => {
+    try {
+      const yf = new yahooFinance();
+      const summary = await yf.quoteSummary(ticker, {
+        modules: ["insiderTransactions", "institutionOwnership"]
+      });
+      
+      const transactions = (summary.insiderTransactions?.transactions || [])
+        .slice(0, 5)
+        .map(t => `[${t.startDate ? new Date(t.startDate).toISOString().slice(0, 10) : ''}] ${t.filerName} (${t.filerRelation}): ${t.transactionText || 'No detail'}`)
+        .join("\n");
+        
+      const institutions = (summary.institutionOwnership?.ownershipList || [])
+        .slice(0, 3)
+        .map(i => `${i.organization}: Held ${((i.pctHeld || 0) * 100).toFixed(2)}% (Value: $${((i.value || 0) / 1e9).toFixed(2)}B)`)
+        .join("\n");
+        
+      return {
+        transactions: transactions || "No recent insider transactions reported.",
+        institutions: institutions || "No institutional holders reported."
+      };
+    } catch (e) {
+      console.warn("⚠️ Failed to fetch insider/institutions info:", e);
+      return {
+        transactions: "Insider transactions unavailable.",
+        institutions: "Institutional ownership unavailable."
+      };
     }
   });
 }
@@ -198,24 +300,37 @@ async function fetchNews(companyName: string): Promise<string> {
   });
 }
 
-// ─────────────────────────────────────────────
-// Helper: format a number for display in key metrics
-// ─────────────────────────────────────────────
-function fmt(val: unknown, suffix = "", decimals = 2): string {
-  if (val === null || val === undefined || val === "") return "N/A";
-  const num = Number(val);
-  if (isNaN(num)) return String(val);
-  if (suffix === "$" && Math.abs(num) >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
-  if (suffix === "$" && Math.abs(num) >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-  if (suffix === "$" && Math.abs(num) >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-  if (suffix === "$") return `$${num.toFixed(decimals)}`;
-  if (suffix === "%") return `${(num * 100).toFixed(decimals)}%`;
-  if (suffix === "x") return `${num.toFixed(decimals)}x`;
-  return num.toFixed(decimals) + suffix;
+/** Fetch competitor metrics for comparison matrix */
+async function fetchCompetitorMetrics(competitorsList: string[]) {
+  const list = [];
+  for (const comp of competitorsList) {
+    const ticker = comp.trim().toUpperCase();
+    if (!ticker) continue;
+    try {
+      const yf = new yahooFinance();
+      const quote = await yf.quote(ticker);
+      const summary = await yf.quoteSummary(ticker, {
+        modules: ["financialData"]
+      });
+      list.push({
+        ticker,
+        name: quote.shortName || quote.longName || ticker,
+        price: fmt(quote.regularMarketPrice, "$"),
+        marketCap: fmt(quote.marketCap, "$"),
+        peRatio: fmt(quote.trailingPE, "x"),
+        profitMargin: fmt(summary.financialData?.profitMargins, "%"),
+        revenueGrowth: fmt(summary.financialData?.revenueGrowth, "%"),
+        debtToEquity: fmt(summary.financialData?.debtToEquity)
+      });
+    } catch {
+      // skip failed competitor fetches
+    }
+  }
+  return list;
 }
 
 // ─────────────────────────────────────────────
-// State definition (issue #1: added rawFinancials)
+// State definition
 // ─────────────────────────────────────────────
 const AgentStateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -225,12 +340,14 @@ const AgentStateAnnotation = Annotation.Root({
   ticker: Annotation<string>(),
   researchPhase: Annotation<string>(),
   companyInfo: Annotation<string>(),
-  /** Raw structured JSON from Yahoo Finance — carried through untouched */
   rawFinancials: Annotation<string>(),
   financialSummary: Annotation<string>(),
   newsSummary: Annotation<string>(),
   competitiveAnalysis: Annotation<string>(),
   riskAnalysis: Annotation<string>(),
+  chartData: Annotation<string>(),          // [NEW] 90-day daily price points JSON
+  competitorMetrics: Annotation<string>(),  // [NEW] competitor matrix JSON
+  critique: Annotation<string>(),           // [NEW] Devil's Advocate critique report
   finalDecision: Annotation<string>(),
   isComplete: Annotation<boolean>(),
 });
@@ -238,7 +355,7 @@ const AgentStateAnnotation = Annotation.Root({
 type AgentState = typeof AgentStateAnnotation.State;
 
 // ─────────────────────────────────────────────
-// NODE 1: Identify Company (direct API call)
+// NODE 1: Identify Company
 // ─────────────────────────────────────────────
 async function identifyCompanyNode(
   state: AgentState
@@ -258,43 +375,67 @@ async function identifyCompanyNode(
 }
 
 // ─────────────────────────────────────────────
-// NODE 2: Financial Analysis (API + 1 LLM call)
-// Now stores rawFinancials in state for the decision node.
+// NODE 2: Financial Analysis (API + Indicators + DCF + LLM)
 // ─────────────────────────────────────────────
 async function financialResearchNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
-  console.log("📊 Node 2: Fetching financials...");
+  console.log("📊 Node 2: Fetching financials & charts...");
   const rawData = await fetchFinancials(state.ticker);
+  const indicators = await fetchChartAndIndicators(state.ticker);
+  
+  let dcfValuation = "N/A";
+  try {
+    const rawMetrics = JSON.parse(rawData);
+    const dcfRes = calculateDCF(rawMetrics, rawMetrics); // passes raw data containing beta and shares
+    dcfValuation = dcfRes.error
+      ? dcfRes.error
+      : `Intrinsic Value: $${dcfRes.intrinsicValue} (Upside: ${dcfRes.upside}, WACC: ${dcfRes.wacc})`;
+  } catch (e) {
+    console.warn("⚠️ Failed to parse financials for DCF:", e);
+  }
 
   console.log("📊 Node 2: Analyzing with LLM...");
   const analysis = await callLLM(
-    `Analyze these financials for ${state.companyName} (${state.ticker}):\n${rawData}\nGive a brief assessment in 5 bullet points covering: valuation, growth, profitability, debt, and analyst view. Max 150 words.`
+    `Analyze these financials for ${state.companyName} (${state.ticker}):
+FINANCIALS: ${rawData}
+INDICATORS: SMA50: ${indicators.sma50}, SMA200: ${indicators.sma200}, RSI: ${indicators.rsi14}, MACD: ${indicators.macd}
+DCF VALUATION: ${dcfValuation}
+
+Give a brief assessment in 5 bullet points covering: valuation (include the DCF intrinsic value findings), growth, profitability, momentum/indicators, and analyst views. Max 150 words.`
   );
 
   return {
     messages: [new HumanMessage(`Financial Analysis:\n${analysis}`)],
     rawFinancials: rawData,
+    chartData: indicators.chartPoints,
     financialSummary: analysis,
     researchPhase: "financial_research",
   };
 }
 
 // ─────────────────────────────────────────────
-// NODE 3: News Research (API + 1 LLM call)
+// NODE 3: News Research (API + Insiders + LLM)
 // ─────────────────────────────────────────────
 async function newsResearchNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
-  console.log("📰 Node 3: Fetching news...");
+  console.log("📰 Node 3: Fetching news & insider data...");
   const newsData = await fetchNews(state.companyName);
   const searchData = await fetchWebSearch(
     `${state.companyName} latest news earnings 2024 2025`
   );
+  const insiderInfo = await fetchInsiderAndInstitutions(state.ticker);
 
   console.log("📰 Node 3: Analyzing with LLM...");
   const analysis = await callLLM(
-    `Summarize recent news for ${state.companyName}:\nNEWS: ${newsData}\nSEARCH: ${searchData}\nList 3 most impactful headlines and overall sentiment (positive/negative/neutral). Max 100 words.`
+    `Summarize recent news and trading activity for ${state.companyName}:
+NEWS: ${newsData}
+SEARCH: ${searchData}
+INSIDER TRANSACTIONS: ${insiderInfo.transactions}
+INSTITUTIONAL OWNERSHIP: ${insiderInfo.institutions}
+
+List 3 most impactful headlines or insider events and overall sentiment. Max 100 words.`
   );
 
   return {
@@ -305,30 +446,45 @@ async function newsResearchNode(
 }
 
 // ─────────────────────────────────────────────
-// NODE 4: Competitive Analysis (API + 1 LLM call)
+// NODE 4: Competitive Analysis (API + Competitor benchmark + LLM)
 // ─────────────────────────────────────────────
 async function competitiveAnalysisNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
   console.log("⚔️ Node 4: Researching competition...");
+  
+  // Ask LLM to identify competitor tickers
+  const promptCompetitors = `Identify the top 2-3 direct publicly traded competitors of ${state.companyName} (${state.ticker}). 
+Return ONLY a comma-separated list of their stock ticker symbols (e.g. MSFT,AMZN,GOOGL). No prose, no tags.`;
+  const competitorsText = await callLLM(promptCompetitors);
+  const competitors = competitorsText.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+  
+  console.log(`⚔️ Node 4: Identified competitors: ${competitors.join(", ")}`);
+  const competitorMatrix = await fetchCompetitorMetrics(competitors);
+
   const searchData = await fetchWebSearch(
     `${state.companyName} competitors market share competitive advantage moat`
   );
 
   console.log("⚔️ Node 4: Analyzing with LLM...");
   const analysis = await callLLM(
-    `Analyze competitive position of ${state.companyName}:\n${searchData}\nCover: top 3 competitors, competitive moat (Wide/Narrow/None), industry outlook. Max 100 words.`
+    `Analyze competitive position of ${state.companyName}:
+SEARCH: ${searchData}
+COMPETITORS BENCHMARK: ${JSON.stringify(competitorMatrix)}
+
+Cover: top competitors comparison, competitive moat (Wide/Narrow/None), and industry outlook. Max 100 words.`
   );
 
   return {
     messages: [new HumanMessage(`Competitive Analysis:\n${analysis}`)],
+    competitorMetrics: JSON.stringify(competitorMatrix),
     competitiveAnalysis: analysis,
     researchPhase: "competitive_analysis",
   };
 }
 
 // ─────────────────────────────────────────────
-// NODE 5: Risk Assessment (API + 1 LLM call)
+// NODE 5: Risk Assessment (API + LLM)
 // ─────────────────────────────────────────────
 async function riskAssessmentNode(
   state: AgentState
@@ -340,7 +496,9 @@ async function riskAssessmentNode(
 
   console.log("⚠️ Node 5: Analyzing with LLM...");
   const analysis = await callLLM(
-    `List top 5 investment risks for ${state.companyName}:\n${searchData}\nFormat each: Risk - Severity (High/Medium/Low) - one line. Max 100 words.`
+    `List top 5 investment risks for ${state.companyName}:
+${searchData}
+Format each: Risk - Severity (High/Medium/Low) - one line. Max 100 words.`
   );
 
   return {
@@ -351,22 +509,54 @@ async function riskAssessmentNode(
 }
 
 // ─────────────────────────────────────────────
+// NODE 5.5: Devil's Advocate Critique [NEW]
+// ─────────────────────────────────────────────
+async function critiqueNode(
+  state: AgentState
+): Promise<Partial<AgentState>> {
+  console.log("😈 Node 5.5: Devil's Advocate Critique...");
+  
+  const prompt = `You are a skeptical, cynical, senior risk officer at an investment bank.
+Your job is to look at this research for ${state.companyName} (${state.ticker}) and critique it.
+Highlight why this might be a bad investment, identify all blind spots, risk factors, regulatory hurdles, and why the bullish thesis might fail.
+Be extremely critical. Do not write anything positive.
+
+FINANCIALS: ${state.financialSummary}
+NEWS SENTIMENT: ${state.newsSummary}
+COMPETITIVE LANDSCAPE: ${state.competitiveAnalysis}
+RISK ASSESSMENT: ${state.riskAnalysis}
+
+Write a detailed critique in 3 bullet points (max 200 words).`;
+
+  const critiqueReport = await callLLM(prompt);
+  
+  return {
+    messages: [new HumanMessage(`Devil's Advocate Critique:\n${critiqueReport}`)],
+    critique: critiqueReport,
+    researchPhase: "devil_advocate_critique",
+  };
+}
+
+// ─────────────────────────────────────────────
 // NODE 6: Final Decision
-// Uses structured output for qualitative fields (issue #2).
-// Injects real numbers from rawFinancials (issue #1).
 // ─────────────────────────────────────────────
 async function decisionNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
   console.log("🧠 Node 6: Making investment decision...");
 
-  // Parse raw financials for programmatic metric injection
-  let rawMetrics: Record<string, unknown> = {};
+  let rawMetrics: Record<string, any> = {};
   try {
     rawMetrics = JSON.parse(state.rawFinancials || "{}");
   } catch {
-    console.warn("⚠️ Could not parse rawFinancials, metrics will show N/A");
+    console.warn("⚠️ Could not parse rawFinancials");
   }
+
+  // Fetch indicators for metric injection
+  const indicators = await fetchChartAndIndicators(state.ticker);
+
+  // Compute programmatic DCF values
+  const dcf = calculateDCF(rawMetrics, rawMetrics);
 
   const prompt = `You are a senior investment analyst. Based on this research about ${state.companyName} (${state.ticker}):
 
@@ -374,10 +564,10 @@ FINANCIALS: ${(state.financialSummary || "N/A").slice(0, 800)}
 NEWS: ${(state.newsSummary || "N/A").slice(0, 500)}
 COMPETITION: ${(state.competitiveAnalysis || "N/A").slice(0, 500)}
 RISKS: ${(state.riskAnalysis || "N/A").slice(0, 500)}
+DEVIL'S ADVOCATE CRITIQUE: ${(state.critique || "N/A").slice(0, 800)}
 
-Provide your investment decision. The decision must be either INVEST or PASS. The confidenceScore must be between 55 and 95. Provide 2-5 bull points and 2-5 bear points.`;
+Provide your investment decision. The decision must be either INVEST or PASS. The confidenceScore must be between 55 and 95. Provide 2-5 bull points and 2-5 bear points. Take the critique seriously and adjust the confidence score accordingly.`;
 
-  // Use structured output — no more manual JSON parsing
   const structuredLlm = llm.withStructuredOutput(QualitativeDecisionSchema);
 
   let qualitative;
@@ -387,12 +577,9 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
       break;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      if (
-        (msg.includes("429") || msg.includes("rate_limit")) &&
-        attempt < 3
-      ) {
+      if ((msg.includes("429") || msg.includes("rate_limit")) && attempt < 3) {
         const wait = backoffMs(attempt, 5000);
-        console.log(`⏳ Rate limited on structured output (attempt ${attempt + 1}/3). Waiting ${Math.round(wait / 1000)}s...`);
+        console.log(`⏳ Rate limited on structured output. Waiting ${Math.round(wait / 1000)}s...`);
         await sleep(wait);
         continue;
       }
@@ -404,7 +591,7 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
     throw new Error("Failed to get structured decision from LLM");
   }
 
-  // Build the full decision with REAL numbers injected programmatically
+  // Combine qualitative decision with real numbers & new critique data
   const fullDecision: FullDecision = {
     ...qualitative,
     ticker: state.ticker,
@@ -419,12 +606,15 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
       fiftyTwoWeekLow: fmt(rawMetrics.fiftyTwoWeekLow, "$"),
       currentPrice: fmt(rawMetrics.price, "$"),
       marketCap: fmt(rawMetrics.marketCap, "$"),
-      freeCashFlow: fmt(rawMetrics.freeCashFlow, "$"),
-      analystRating: String(rawMetrics.recommendationKey || "N/A"),
+      freeCashFlow: dcf.intrinsicValue !== "N/A" ? `$${Number(rawMetrics.freeCashflow).toLocaleString()}` : "N/A",
+      analystRating: dcf.intrinsicValue !== "N/A"
+        ? `DCF: $${dcf.intrinsicValue} (${dcf.upside} upside)`
+        : String(rawMetrics.recommendationKey || "N/A"),
     },
+    chartData: state.chartData || "[]",
+    competitorMetrics: state.competitorMetrics || "[]",
+    critique: state.critique || "",
   };
-
-  console.log("🤖 Final Decision:", JSON.stringify(fullDecision, null, 2));
 
   return {
     messages: [new HumanMessage(JSON.stringify(fullDecision))],
@@ -435,7 +625,7 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
 }
 
 // ─────────────────────────────────────────────
-// BUILD THE GRAPH — Simple linear chain
+// BUILD THE GRAPH
 // ─────────────────────────────────────────────
 export function buildInvestmentGraph() {
   const graph = new StateGraph(AgentStateAnnotation)
@@ -444,15 +634,16 @@ export function buildInvestmentGraph() {
     .addNode("news_research", newsResearchNode)
     .addNode("competitive_analysis", competitiveAnalysisNode)
     .addNode("risk_assessment", riskAssessmentNode)
+    .addNode("critique", critiqueNode) // [NEW]
     .addNode("decision", decisionNode)
 
-    // Simple linear flow
     .addEdge(START, "identify_company")
     .addEdge("identify_company", "financial_research")
     .addEdge("financial_research", "news_research")
     .addEdge("news_research", "competitive_analysis")
     .addEdge("competitive_analysis", "risk_assessment")
-    .addEdge("risk_assessment", "decision")
+    .addEdge("risk_assessment", "critique") // [NEW]
+    .addEdge("critique", "decision")       // [NEW]
     .addEdge("decision", END);
 
   return graph.compile();

@@ -64,4 +64,8 @@ export interface FullDecision extends QualitativeDecision {
     freeCashFlow: string;
     analystRating: string;
   };
+  chartData?: string;          // JSON string of 90-day daily close prices
+  competitorMetrics?: string;  // JSON string of competitor financials benchmarking
+  critique?: string;           // Skeptical review by Devil's Advocate
 }
+

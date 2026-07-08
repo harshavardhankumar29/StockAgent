@@ -98,6 +98,14 @@ export default function HistoryPage() {
           <Link href="/news" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
             Market News
           </Link>
+          <Show when="signed-in">
+            <Link href="/watchlist" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
+              Watchlist
+            </Link>
+            <Link href="/portfolio" className="text-xs text-slate-400 hover:text-white transition-colors font-medium">
+              Portfolio
+            </Link>
+          </Show>
           <div className="flex items-center gap-3">
             <Show when="signed-out">
               <SignInButton mode="modal">
@@ -111,6 +119,7 @@ export default function HistoryPage() {
             </Show>
           </div>
         </div>
+
       </header>
 
       {/* Main Content Area */}

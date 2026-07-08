@@ -169,8 +169,12 @@ export async function POST(request: NextRequest) {
                         riskLevel: decision.riskLevel || null,
                         timeHorizon:
                           decision.timeHorizon || null,
+                        chartData: decision.chartData || null,
+                        competitorMetrics: decision.competitorMetrics || null,
+                        critique: decision.critique || null,
                       },
                     });
+
                   savedId = savedRecord.id;
                   console.log(
                     "💾 Saved research history to database:",

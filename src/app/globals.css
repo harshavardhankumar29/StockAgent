@@ -105,3 +105,65 @@ body::before {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Print CSS Overrides */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+  
+  body::before,
+  .ambient-glow,
+  header,
+  footer,
+  .fixed,
+  button,
+  form,
+  .print\:hidden {
+    display: none !important;
+  }
+  
+  .print-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .bg-surface,
+  .bg-surface\/60,
+  .bg-surface\/40 {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  text {
+    fill: #000000 !important;
+  }
+
+  line {
+    stroke: #e2e8f0 !important;
+  }
+
+  .text-white {
+    color: #000000 !important;
+  }
+
+  .text-slate-400,
+  .text-slate-300,
+  .text-slate-600 {
+    color: #475569 !important;
+  }
+
+  /* Force page breaks */
+  h2, h3, table {
+    page-break-inside: avoid;
+  }
+}
+
