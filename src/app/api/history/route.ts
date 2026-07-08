@@ -12,6 +12,23 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
+  const ids = searchParams.get("ids");
+
+  if (ids) {
+    try {
+      const idsList = ids.split(",").filter(Boolean);
+      const records = await prisma.researchHistory.findMany({
+        where: {
+          id: { in: idsList },
+          userId,
+        },
+      });
+      return NextResponse.json(records);
+    } catch (error) {
+      console.error("❌ Failed to fetch research reports by ids list:", error);
+      return NextResponse.json({ error: "Failed to fetch reports list" }, { status: 500 });
+    }
+  }
 
   if (id) {
     try {

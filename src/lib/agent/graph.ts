@@ -5,6 +5,7 @@ import yahooFinance from "yahoo-finance2";
 import { QualitativeDecisionSchema } from "./schemas";
 import type { FullDecision } from "./schemas";
 import { cached } from "@/lib/cache";
+import prisma from "@/lib/db";
 import {
   calculateDCF,
   calculateSMA,
@@ -348,11 +349,41 @@ const AgentStateAnnotation = Annotation.Root({
   chartData: Annotation<string>(),          // [NEW] 90-day daily price points JSON
   competitorMetrics: Annotation<string>(),  // [NEW] competitor matrix JSON
   critique: Annotation<string>(),           // [NEW] Devil's Advocate critique report
+  uploadedContextId: Annotation<string>(),  // ID of uploaded PDF/Image context in database
+  uploadedContextText: Annotation<string>(),// Parsed content text from the uploaded file
   finalDecision: Annotation<string>(),
   isComplete: Annotation<boolean>(),
 });
 
 type AgentState = typeof AgentStateAnnotation.State;
+
+// ─────────────────────────────────────────────
+// NODE 0: Load Uploaded Context [NEW]
+// ─────────────────────────────────────────────
+async function loadContextNode(
+  state: AgentState
+): Promise<Partial<AgentState>> {
+  if (state.uploadedContextId) {
+    console.log(`📂 Node 0: Loading uploaded file context (ID: ${state.uploadedContextId})...`);
+    try {
+      const record = await prisma.uploadedContext.findUnique({
+        where: { id: state.uploadedContextId }
+      });
+      if (record) {
+        return {
+          uploadedContextText: record.parsedText,
+          researchPhase: "loading_context",
+        };
+      }
+    } catch (e) {
+      console.warn("⚠️ Failed to load uploaded context from DB:", e);
+    }
+  }
+  return {
+    uploadedContextText: "",
+    researchPhase: "skipping_context",
+  };
+}
 
 // ─────────────────────────────────────────────
 // NODE 1: Identify Company
@@ -565,8 +596,9 @@ NEWS: ${(state.newsSummary || "N/A").slice(0, 500)}
 COMPETITION: ${(state.competitiveAnalysis || "N/A").slice(0, 500)}
 RISKS: ${(state.riskAnalysis || "N/A").slice(0, 500)}
 DEVIL'S ADVOCATE CRITIQUE: ${(state.critique || "N/A").slice(0, 800)}
+${state.uploadedContextText ? `USER UPLOADED FILE CONTEXT: ${state.uploadedContextText.slice(0, 2500)}` : ""}
 
-Provide your investment decision. The decision must be either INVEST or PASS. The confidenceScore must be between 55 and 95. Provide 2-5 bull points and 2-5 bear points. Take the critique seriously and adjust the confidence score accordingly.`;
+Provide your investment decision. The decision must be either INVEST or PASS. The confidenceScore must be between 55 and 95. Provide 2-5 bull points and 2-5 bear points. Take the critique and uploaded private context seriously and adjust the confidence score accordingly.`;
 
   const structuredLlm = llm.withStructuredOutput(QualitativeDecisionSchema);
 
@@ -629,6 +661,7 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
 // ─────────────────────────────────────────────
 export function buildInvestmentGraph() {
   const graph = new StateGraph(AgentStateAnnotation)
+    .addNode("load_context", loadContextNode) // [NEW]
     .addNode("identify_company", identifyCompanyNode)
     .addNode("financial_research", financialResearchNode)
     .addNode("news_research", newsResearchNode)
@@ -637,7 +670,8 @@ export function buildInvestmentGraph() {
     .addNode("devil_critique", critiqueNode)
     .addNode("decision", decisionNode)
 
-    .addEdge(START, "identify_company")
+    .addEdge(START, "load_context")
+    .addEdge("load_context", "identify_company")
     .addEdge("identify_company", "financial_research")
     .addEdge("financial_research", "news_research")
     .addEdge("news_research", "competitive_analysis")

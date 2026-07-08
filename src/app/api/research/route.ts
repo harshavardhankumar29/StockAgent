@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { companyName } = await request.json();
+  const { companyName, uploadedContextId } = await request.json();
 
   if (!companyName) {
     return new Response(JSON.stringify({ error: "Company name required" }), {
@@ -94,6 +94,11 @@ export async function POST(request: NextRequest) {
             newsSummary: "",
             competitiveAnalysis: "",
             riskAnalysis: "",
+            chartData: "",
+            competitorMetrics: "",
+            critique: "",
+            uploadedContextId: uploadedContextId || "",
+            uploadedContextText: "",
             finalDecision: "",
             isComplete: false,
           },
@@ -174,6 +179,7 @@ export async function POST(request: NextRequest) {
                         chartData: decision.chartData || null,
                         competitorMetrics: decision.competitorMetrics || null,
                         critique: decision.critique || null,
+                        uploadedContextId: uploadedContextId || null,
                       },
                     });
 

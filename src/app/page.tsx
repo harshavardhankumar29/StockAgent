@@ -15,14 +15,23 @@ export default function Home() {
   const router = useRouter();
   const { isSignedIn } = useUser();
   const { openSignIn } = useClerk();
-  const handleResearch = (name: string) => {
+  const handleResearch = (name: string, uploadedContextId?: string) => {
     if (!isSignedIn) {
       openSignIn({
-        fallbackRedirectUrl: `/research/${encodeURIComponent(name)}`
+        fallbackRedirectUrl: `/`
       });
       return;
     }
-    router.push(`/research/${encodeURIComponent(name)}`);
+
+    const isBatch = name.includes(",");
+    if (isBatch) {
+      // Clean and join tickers
+      const tickers = name.split(",").map(t => t.trim().toUpperCase()).filter(Boolean).join(",");
+      router.push(`/research/batch?tickers=${encodeURIComponent(tickers)}`);
+    } else {
+      const queryParam = uploadedContextId ? `?contextId=${uploadedContextId}` : "";
+      router.push(`/research/${encodeURIComponent(name.trim().toUpperCase())}${queryParam}`);
+    }
   };
 
   return (

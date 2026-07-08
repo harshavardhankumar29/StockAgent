@@ -28,12 +28,13 @@ export default function ResearchPage({
   searchParams,
 }: {
   params: Promise<{ company: string }>;
-  searchParams: Promise<{ id?: string }>;
+  searchParams: Promise<{ id?: string; contextId?: string }>;
 }) {
   const resolvedParams = use(params);
   const resolvedSearchParams = use(searchParams);
   const companyName = decodeURIComponent(resolvedParams.company);
   const historyId = resolvedSearchParams.id;
+  const contextId = resolvedSearchParams.contextId;
   const router = useRouter();
 
   const [steps, setSteps] = useState<Map<string, "running" | "complete" | "pending">>(
@@ -115,7 +116,10 @@ export default function ResearchPage({
         const response = await fetch("/api/research", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName }),
+          body: JSON.stringify({
+            companyName,
+            uploadedContextId: contextId || ""
+          }),
         });
 
         if (!response.ok) throw new Error("Failed to initialize search agent.");

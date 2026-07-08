@@ -29,10 +29,23 @@ model ResearchHistory {
   chartData         String?  // stored as JSON string of 90-day prices
   competitorMetrics String?  // stored as JSON string of competitor financials
   critique          String?  // stored as text
+  uploadedContextId String?  // link to uploaded context document/image summary
   createdAt         DateTime @default(now())
 
   @@index([userId])
 }
+
+model UploadedContext {
+  id          String   @id @default(uuid())
+  userId      String
+  fileName    String
+  fileType    String   // "PDF" or "IMAGE"
+  parsedText  String   // raw parsed text or visual summary
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
 
 model Watchlist {
   id          String   @id @default(uuid())
