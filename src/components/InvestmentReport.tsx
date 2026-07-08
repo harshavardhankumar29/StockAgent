@@ -21,12 +21,25 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
     return () => clearTimeout(timeout);
   }, [data.confidenceScore]);
 
-  const metrics = data.keyMetrics || {
-    peRatio: "N/A",
-    revenueGrowth: "N/A",
-    profitMargin: "N/A",
-    debtLevel: "N/A"
-  };
+  // Primary metrics shown in the hero grid
+  const primaryMetrics = [
+    { label: "P/E Ratio", value: data.keyMetrics?.peRatio },
+    { label: "Revenue Growth", value: data.keyMetrics?.revenueGrowth },
+    { label: "Profit Margin", value: data.keyMetrics?.profitMargin },
+    { label: "Current Price", value: data.keyMetrics?.currentPrice },
+  ];
+
+  // Secondary metrics shown in the detail row
+  const secondaryMetrics = [
+    { label: "Forward P/E", value: data.keyMetrics?.forwardPE },
+    { label: "Market Cap", value: data.keyMetrics?.marketCap },
+    { label: "Debt/Equity", value: data.keyMetrics?.debtToEquity },
+    { label: "ROE", value: data.keyMetrics?.returnOnEquity },
+    { label: "Free Cash Flow", value: data.keyMetrics?.freeCashFlow },
+    { label: "52W High", value: data.keyMetrics?.fiftyTwoWeekHigh },
+    { label: "52W Low", value: data.keyMetrics?.fiftyTwoWeekLow },
+    { label: "Analyst Rating", value: data.keyMetrics?.analystRating },
+  ];
 
   return (
     <div className="space-y-6 py-8 max-w-4xl mx-auto animate-fade-in">
@@ -99,19 +112,34 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
         </SpotlightCard>
       </div>
 
-      {/* Financial Grid */}
+      {/* Primary Financial Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {Object.entries(metrics).map(([key, val]) => (
+        {primaryMetrics.map((m) => (
           <SpotlightCard
-            key={key}
+            key={m.label}
             spotlightColor="rgba(6, 182, 212, 0.08)"
             className="bg-surface/60 border border-border p-4 rounded-xl hover:border-border-hover transition-all duration-300"
           >
             <span className="text-[9px] uppercase tracking-wider text-slate-600 font-semibold block mb-1">
-              {key.replace(/([A-Z])/g, ' $1').trim()}
+              {m.label}
             </span>
-            <p className="text-xl font-mono font-bold text-white">{val as string || "N/A"}</p>
+            <p className="text-xl font-mono font-bold text-white">{m.value || "N/A"}</p>
           </SpotlightCard>
+        ))}
+      </div>
+
+      {/* Secondary Financial Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {secondaryMetrics.map((m) => (
+          <div
+            key={m.label}
+            className="bg-surface/40 border border-border/50 px-3 py-2.5 rounded-lg"
+          >
+            <span className="text-[8px] uppercase tracking-wider text-slate-600 font-semibold block mb-0.5">
+              {m.label}
+            </span>
+            <p className="text-sm font-mono font-medium text-slate-300">{m.value || "N/A"}</p>
+          </div>
         ))}
       </div>
 
