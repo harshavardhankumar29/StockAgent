@@ -19,6 +19,7 @@ const RESEARCH_STEPS = [
   "news_research",
   "competitive_analysis",
   "risk_assessment",
+  "devil_critique",
   "decision"
 ];
 

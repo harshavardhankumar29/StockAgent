@@ -9,6 +9,7 @@ const phases = [
   { id: 'news_research', label: 'News Sentiment' },
   { id: 'competitive_analysis', label: 'Competitive Moat' },
   { id: 'risk_assessment', label: 'Risk Assessment' },
+  { id: 'devil_critique', label: "Devil's Advocate" },
   { id: 'decision', label: 'Final Decision' }
 ];
 

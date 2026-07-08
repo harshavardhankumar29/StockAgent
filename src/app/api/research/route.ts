@@ -73,8 +73,10 @@ export async function POST(request: NextRequest) {
           news_research: "📰 Researching recent news...",
           competitive_analysis: "⚔️ Analyzing competitive landscape...",
           risk_assessment: "⚠️ Assessing risks...",
+          devil_critique: "😈 Conducting Devil's Advocate critique...",
           decision: "🧠 Making investment decision...",
         };
+
 
         const eventStream = graph.streamEvents(
           {

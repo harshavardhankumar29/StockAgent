@@ -634,7 +634,7 @@ export function buildInvestmentGraph() {
     .addNode("news_research", newsResearchNode)
     .addNode("competitive_analysis", competitiveAnalysisNode)
     .addNode("risk_assessment", riskAssessmentNode)
-    .addNode("critique", critiqueNode) // [NEW]
+    .addNode("devil_critique", critiqueNode)
     .addNode("decision", decisionNode)
 
     .addEdge(START, "identify_company")
@@ -642,9 +642,10 @@ export function buildInvestmentGraph() {
     .addEdge("financial_research", "news_research")
     .addEdge("news_research", "competitive_analysis")
     .addEdge("competitive_analysis", "risk_assessment")
-    .addEdge("risk_assessment", "critique") // [NEW]
-    .addEdge("critique", "decision")       // [NEW]
+    .addEdge("risk_assessment", "devil_critique")
+    .addEdge("devil_critique", "decision")
     .addEdge("decision", END);
 
   return graph.compile();
 }
+
