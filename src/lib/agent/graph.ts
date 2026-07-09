@@ -104,23 +104,33 @@ async function fetchTicker(companyName: string): Promise<string> {
       const yf = new yahooFinance();
       const results = await yf.search(companyName);
       if (results.quotes?.length) {
-        const q = results.quotes[0];
-        return JSON.stringify({
-          symbol: q.symbol,
-          name:
-            ("longname" in q ? q.longname : "") ||
-            ("shortname" in q ? q.shortname : companyName),
-          exchange: "exchange" in q ? q.exchange : "N/A",
-        });
+        // Prioritize EQUITY quotes that have valid symbols
+        let validQuote = results.quotes.find(
+          (q) => q.isYahooFinance && q.symbol && q.quoteType === "EQUITY"
+        );
+        // Fallback to any valid Yahoo Finance quote (ETF, Index, etc.) if no equity is found
+        if (!validQuote) {
+          validQuote = results.quotes.find((q) => q.isYahooFinance && q.symbol);
+        }
+
+        if (validQuote) {
+          return JSON.stringify({
+            symbol: validQuote.symbol,
+            name:
+              ("longname" in validQuote ? validQuote.longname : "") ||
+              ("shortname" in validQuote ? validQuote.shortname : companyName),
+            exchange: "exchange" in validQuote ? validQuote.exchange : "N/A",
+          });
+        }
       }
       return JSON.stringify({
-        symbol: companyName,
+        symbol: "",
         name: companyName,
         exchange: "N/A",
       });
     } catch {
       return JSON.stringify({
-        symbol: companyName,
+        symbol: "",
         name: companyName,
         exchange: "N/A",
       });
@@ -397,11 +407,14 @@ async function identifyCompanyNode(
 
   return {
     messages: [
-      new HumanMessage(`Company: ${parsed.name}, Ticker: ${parsed.symbol}`),
+      new HumanMessage(parsed.symbol 
+        ? `Company: ${parsed.name}, Ticker: ${parsed.symbol}`
+        : `Company: ${parsed.name} is a private company or not publicly listed.`
+      ),
     ],
-    ticker: parsed.symbol || state.companyName,
+    ticker: parsed.symbol || "",
     companyInfo: tickerData,
-    researchPhase: "identifying_company",
+    researchPhase: "company_identified",
   };
 }
 
@@ -411,6 +424,15 @@ async function identifyCompanyNode(
 async function financialResearchNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("📊 Node 2: Skipping financials (private/unlisted company)...");
+    return {
+      rawFinancials: "{}",
+      chartData: "[]",
+      financialSummary: "Company is not publicly listed. Financial data is unavailable.",
+      researchPhase: "financial_research",
+    };
+  }
   console.log("📊 Node 2: Fetching financials & charts...");
   const rawData = await fetchFinancials(state.ticker);
   const indicators = await fetchChartAndIndicators(state.ticker);
@@ -451,6 +473,13 @@ Give a brief assessment in 5 bullet points covering: valuation (include the DCF 
 async function newsResearchNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("📰 Node 3: Skipping news (private/unlisted company)...");
+    return {
+      newsSummary: "Company is not publicly listed. News sentiment is unavailable.",
+      researchPhase: "news_research",
+    };
+  }
   console.log("📰 Node 3: Fetching news & insider data...");
   const newsData = await fetchNews(state.companyName);
   const searchData = await fetchWebSearch(
@@ -482,6 +511,14 @@ List 3 most impactful headlines or insider events and overall sentiment. Max 100
 async function competitiveAnalysisNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("⚔️ Node 4: Skipping competitive analysis (private/unlisted company)...");
+    return {
+      competitorMetrics: "[]",
+      competitiveAnalysis: "Company is not publicly listed. Competitive analysis is unavailable.",
+      researchPhase: "competitive_analysis",
+    };
+  }
   console.log("⚔️ Node 4: Researching competition...");
   
   // Ask LLM to identify competitor tickers
@@ -520,6 +557,13 @@ Cover: top competitors comparison, competitive moat (Wide/Narrow/None), and indu
 async function riskAssessmentNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("⚠️ Node 5: Skipping risk assessment (private/unlisted company)...");
+    return {
+      riskAnalysis: "Company is not publicly listed. Risk assessment is unavailable.",
+      researchPhase: "risk_assessment",
+    };
+  }
   console.log("⚠️ Node 5: Assessing risks...");
   const searchData = await fetchWebSearch(
     `${state.companyName} investment risks regulatory legal challenges`
@@ -545,6 +589,13 @@ Format each: Risk - Severity (High/Medium/Low) - one line. Max 100 words.`
 async function critiqueNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("😈 Node 5.5: Skipping critique (private/unlisted company)...");
+    return {
+      critique: "Company is not publicly listed. Counter-thesis critique is unavailable.",
+      researchPhase: "devil_advocate_critique",
+    };
+  }
   console.log("😈 Node 5.5: Devil's Advocate Critique...");
   
   const prompt = `You are a skeptical, cynical, senior risk officer at an investment bank.
@@ -574,6 +625,45 @@ Write a detailed critique in 3 bullet points (max 200 words).`;
 async function decisionNode(
   state: AgentState
 ): Promise<Partial<AgentState>> {
+  if (!state.ticker) {
+    console.log("🧠 Node 6: Private company fallback decision...");
+    const fallbackDecision: FullDecision = {
+      ticker: "N/A",
+      decision: "PASS",
+      confidenceScore: 0,
+      reasoning: `Analysis aborted: ${state.companyName} is a private company or is not publicly listed on any major stock exchange. StockAgent only analyzes publicly traded assets.`,
+      keyMetrics: {
+        peRatio: "N/A",
+        forwardPE: "N/A",
+        revenueGrowth: "N/A",
+        profitMargin: "N/A",
+        debtToEquity: "N/A",
+        returnOnEquity: "N/A",
+        fiftyTwoWeekHigh: "N/A",
+        fiftyTwoWeekLow: "N/A",
+        currentPrice: "N/A",
+        marketCap: "N/A",
+        freeCashFlow: "N/A",
+        analystRating: "N/A",
+      },
+      bullPoints: [],
+      bearPoints: ["Company is not publicly traded."],
+      financialHealth: "Poor",
+      moatStrength: "None",
+      growthProspects: "Low",
+      riskLevel: "High",
+      timeHorizon: "Short-term",
+      chartData: "[]",
+      competitorMetrics: "[]",
+      critique: "N/A",
+    };
+    return {
+      messages: [new HumanMessage(JSON.stringify(fallbackDecision))],
+      finalDecision: JSON.stringify(fallbackDecision),
+      researchPhase: "decision_made",
+      isComplete: true,
+    };
+  }
   console.log("🧠 Node 6: Making investment decision...");
 
   let rawMetrics: Record<string, any> = {};
