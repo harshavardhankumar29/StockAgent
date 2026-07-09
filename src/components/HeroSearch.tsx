@@ -31,6 +31,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const popularStocks = [
@@ -44,10 +45,11 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
 
   // Fetch suggestions with debouncing
   useEffect(() => {
-    const cleanQuery = query.trim();
+    const segments = query.split(",");
+    const activeSegment = segments[segments.length - 1].trim();
     
-    // Don't suggest for empty query, comma lists, or single chars
-    if (!cleanQuery || cleanQuery.includes(",") || cleanQuery.length < 2) {
+    // Don't suggest if the active segment is empty or too short
+    if (!activeSegment || activeSegment.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
       return;
@@ -56,7 +58,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     const delayDebounce = setTimeout(async () => {
       setIsSuggesting(true);
       try {
-        const res = await fetch(`/api/research/suggest?q=${encodeURIComponent(cleanQuery)}`);
+        const res = await fetch(`/api/research/suggest?q=${encodeURIComponent(activeSegment)}`);
         if (res.ok) {
           const list = await res.json();
           setSuggestions(list);
@@ -84,17 +86,37 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleSelectSuggestion = (item: Suggestion) => {
+    const segments = query.split(",");
+    if (segments.length > 1) {
+      // Batch mode: replace active segment, append comma
+      segments[segments.length - 1] = ` ${item.symbol}`;
+      const newQuery = segments.join(",") + ", ";
+      setQuery(newQuery);
+      setSuggestions([]);
+      setShowDropdown(false);
+      // Keep focus on input
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    } else {
+      // Single mode: set query and run research
+      setQuery(item.symbol);
+      setSuggestions([]);
+      setShowDropdown(false);
+      onResearch(item.symbol);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeSuggestionIdx >= 0 && activeSuggestionIdx < suggestions.length) {
-      // If navigating via keyboard, select that one!
-      const selected = suggestions[activeSuggestionIdx];
-      setQuery(selected.symbol);
-      setShowDropdown(false);
-      onResearch(selected.symbol);
+      handleSelectSuggestion(suggestions[activeSuggestionIdx]);
     } else if (query.trim()) {
       setShowDropdown(false);
-      onResearch(query.trim());
+      // Clean trailing comma from query before triggering research
+      const clean = query.trim().replace(/,\s*$/, "");
+      onResearch(clean);
     }
   };
 
@@ -236,6 +258,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
               <Search className={`mr-3 transition-colors duration-300 ${isFocused ? 'text-emerald' : 'text-slate-600'}`} size={18} />
               <input
                 type="text"
+                ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onFocus={() => {
@@ -282,11 +305,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
             {suggestions.map((item, idx) => (
               <button
                 key={item.symbol + idx}
-                onClick={() => {
-                  setQuery(item.symbol);
-                  setShowDropdown(false);
-                  onResearch(item.symbol);
-                }}
+                onClick={() => handleSelectSuggestion(item)}
                 onMouseEnter={() => setActiveSuggestionIdx(idx)}
                 className={`w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.04] transition-colors text-left cursor-pointer border-l-2 ${
                   activeSuggestionIdx === idx 

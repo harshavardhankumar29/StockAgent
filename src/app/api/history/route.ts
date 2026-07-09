@@ -57,3 +57,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  try {
+    if (id) {
+      // Delete specific history record
+      const record = await prisma.researchHistory.findUnique({ where: { id } });
+      if (!record || record.userId !== userId) {
+        return NextResponse.json({ error: "Report not found" }, { status: 404 });
+      }
+      await prisma.researchHistory.delete({ where: { id } });
+      return NextResponse.json({ success: true, message: "Report deleted successfully" });
+    } else {
+      // Clear entire research history for user
+      await prisma.researchHistory.deleteMany({ where: { userId } });
+      return NextResponse.json({ success: true, message: "Research history cleared successfully" });
+    }
+  } catch (error) {
+    console.error("❌ Failed to delete history:", error);
+    return NextResponse.json({ error: "Failed to delete history record" }, { status: 500 });
+  }
+}

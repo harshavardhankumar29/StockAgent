@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Show, UserButton, SignInButton, useUser, useClerk } from "@clerk/nextjs";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
-import { TrendingUp, TrendingDown, Clock, Search as SearchIcon, ArrowLeft, Zap } from "lucide-react";
+import { TrendingUp, TrendingDown, Clock, Search as SearchIcon, ArrowLeft, Zap, Trash2 } from "lucide-react";
 import TickerTape from "@/components/TickerTape";
 
 const SoftAurora = dynamic(() => import("@/components/reactbits/SoftAurora"), { ssr: false });
@@ -34,6 +34,36 @@ export default function HistoryPage() {
 
   const handleResearch = (name: string, id: string) => {
     router.push(`/research/${encodeURIComponent(name)}?id=${id}`);
+  };
+
+  const handleClearHistory = async () => {
+    if (!confirm("Are you sure you want to clear your entire research history? This cannot be undone.")) return;
+    
+    try {
+      setLoading(true);
+      const res = await fetch("/api/history", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to clear history");
+      setHistory([]);
+    } catch (err) {
+      console.error("Error clearing history:", err);
+      alert("Failed to clear history. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRecord = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this research report?")) return;
+    
+    try {
+      const res = await fetch(`/api/history?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete report");
+      setHistory((prev) => prev.filter((item) => item.id !== id));
+    } catch (err) {
+      console.error("Error deleting report:", err);
+      alert("Failed to delete report. Please try again.");
+    }
   };
 
   useEffect(() => {
@@ -146,9 +176,17 @@ export default function HistoryPage() {
             </div>
           </div>
           {history.length > 0 && (
-            <span className="text-[10px] font-mono text-slate-400 bg-surface px-3 py-1.5 rounded-lg border border-border">
-              {history.length} report{history.length !== 1 ? "s" : ""} saved
-            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleClearHistory}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-crimson/10 border border-crimson/20 text-crimson hover:bg-crimson/25 transition-all text-[10px] font-semibold cursor-pointer"
+              >
+                <Trash2 size={11} /> Clear All History
+              </button>
+              <span className="text-[10px] font-mono text-slate-400 bg-surface px-3 py-1.5 rounded-lg border border-border">
+                {history.length} report{history.length !== 1 ? "s" : ""} saved
+              </span>
+            </div>
           )}
         </div>
 
@@ -205,14 +243,23 @@ export default function HistoryPage() {
                             </h3>
                             <span className="text-[10px] font-mono text-slate-500">{item.ticker}</span>
                           </div>
-                          <span className={`shrink-0 flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded-md font-bold uppercase tracking-wider ${
-                            isInvest
-                              ? "bg-emerald/8 text-emerald border border-emerald/15"
-                              : "bg-crimson/8 text-crimson border border-crimson/15"
-                          }`}>
-                            {isInvest ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
-                            {item.decision}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`shrink-0 flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded-md font-bold uppercase tracking-wider ${
+                              isInvest
+                                ? "bg-emerald/8 text-emerald border border-emerald/15"
+                                : "bg-crimson/8 text-crimson border border-crimson/15"
+                            }`}>
+                              {isInvest ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                              {item.decision}
+                            </span>
+                            <button
+                              onClick={(e) => handleDeleteRecord(e, item.id)}
+                              title="Delete this report"
+                              className="p-1 rounded bg-white/[0.02] hover:bg-crimson/10 border border-border/40 hover:border-crimson/30 text-slate-500 hover:text-crimson transition-all cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Reasoning */}
