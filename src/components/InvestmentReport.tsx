@@ -137,10 +137,14 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
 
         const chunk = decoder.decode(value, { stream: true });
         setChatMessages((prev) => {
+          if (prev.length === 0) return prev;
           const next = [...prev];
           const lastMsg = next[next.length - 1];
           if (lastMsg && lastMsg.role === "assistant") {
-            lastMsg.content += chunk;
+            next[next.length - 1] = {
+              ...lastMsg,
+              content: lastMsg.content + chunk,
+            };
           }
           return next;
         });
