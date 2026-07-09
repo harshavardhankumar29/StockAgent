@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { Search, ArrowRight, Paperclip, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Search, ArrowRight, Paperclip, Loader2, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
 import DecryptedText from "./reactbits/DecryptedText";
 import ShinyText from "./reactbits/ShinyText";
 
@@ -7,16 +7,31 @@ interface HeroSearchProps {
   onResearch: (query: string, uploadedContextId?: string) => void;
 }
 
+interface Suggestion {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;
+}
+
 export default function HeroSearch({ onResearch }: HeroSearchProps) {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Suggestions state
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(-1);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
   // Upload state
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const popularStocks = [
     { emoji: '🟢', name: 'NVIDIA', ticker: 'NVDA' },
@@ -27,10 +42,74 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     { emoji: '💜', name: 'Meta', ticker: 'META' },
   ];
 
+  // Fetch suggestions with debouncing
+  useEffect(() => {
+    const cleanQuery = query.trim();
+    
+    // Don't suggest for empty query, comma lists, or single chars
+    if (!cleanQuery || cleanQuery.includes(",") || cleanQuery.length < 2) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsSuggesting(true);
+      try {
+        const res = await fetch(`/api/research/suggest?q=${encodeURIComponent(cleanQuery)}`);
+        if (res.ok) {
+          const list = await res.json();
+          setSuggestions(list);
+          setShowDropdown(list.length > 0);
+          setActiveSuggestionIdx(-1);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch autocomplete suggestions:", err);
+      } finally {
+        setIsSuggesting(false);
+      }
+    }, 250); // 250ms debounce
+
+    return () => clearTimeout(delayDebounce);
+  }, [query]);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) {
+    if (activeSuggestionIdx >= 0 && activeSuggestionIdx < suggestions.length) {
+      // If navigating via keyboard, select that one!
+      const selected = suggestions[activeSuggestionIdx];
+      setQuery(selected.symbol);
+      setShowDropdown(false);
+      onResearch(selected.symbol);
+    } else if (query.trim()) {
+      setShowDropdown(false);
       onResearch(query.trim());
+    }
+  };
+
+  // Keyboard navigation inside dropdown
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || suggestions.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveSuggestionIdx((prev) => (prev + 1 >= suggestions.length ? 0 : prev + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveSuggestionIdx((prev) => (prev - 1 < 0 ? suggestions.length - 1 : prev - 1));
+    } else if (e.key === "Escape") {
+      setShowDropdown(false);
     }
   };
 
@@ -145,8 +224,8 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
         </p>
       </div>
 
-      {/* Search Bar Container */}
-      <div className="w-full max-w-xl">
+      {/* Search Bar & AutoComplete dropdown Container */}
+      <div className="w-full max-w-xl relative" ref={containerRef}>
         <form onSubmit={handleSubmit} className="w-full group">
           <div className={`relative p-[1px] rounded-2xl transition-all duration-500 ${
             isFocused 
@@ -159,12 +238,21 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => setIsFocused(true)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  if (suggestions.length > 0) setShowDropdown(true);
+                }}
                 onBlur={() => setIsFocused(false)}
+                onKeyDown={handleKeyDown}
                 placeholder="AAPL or AAPL, MSFT, TSLA or drag & drop files..."
                 className="bg-transparent outline-none w-full text-white placeholder:text-slate-600 text-sm font-medium"
               />
               
+              {/* Suggestion loading spinner inside input */}
+              {isSuggesting && (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-500 mr-2 shrink-0" />
+              )}
+
               {/* Paperclip upload button */}
               <button
                 type="button"
@@ -187,6 +275,41 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
             </div>
           </div>
         </form>
+
+        {/* Floating Suggestion Dropdown List */}
+        {showDropdown && suggestions.length > 0 && (
+          <div className="absolute top-[105%] left-0 w-full bg-surface/95 backdrop-blur-md border border-border rounded-xl shadow-2xl overflow-hidden z-50 py-1 text-left">
+            {suggestions.map((item, idx) => (
+              <button
+                key={item.symbol + idx}
+                onClick={() => {
+                  setQuery(item.symbol);
+                  setShowDropdown(false);
+                  onResearch(item.symbol);
+                }}
+                onMouseEnter={() => setActiveSuggestionIdx(idx)}
+                className={`w-full flex items-center justify-between px-5 py-3 hover:bg-white/[0.04] transition-colors text-left cursor-pointer border-l-2 ${
+                  activeSuggestionIdx === idx 
+                    ? "bg-white/[0.04] border-emerald text-white" 
+                    : "border-transparent text-slate-300"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="font-mono font-bold text-white text-sm">{item.symbol}</span>
+                    <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono font-semibold uppercase">
+                      {item.type}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 truncate block max-w-[320px]">{item.name}</span>
+                </div>
+                <span className="text-[10px] text-slate-600 font-mono font-semibold shrink-0 uppercase">
+                  {item.exchange}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Upload Status Feedbacks */}
         {isUploading && (
