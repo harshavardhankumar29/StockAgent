@@ -270,7 +270,9 @@ export default function ResearchPage({
         </div>
       </header>
 
-      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 pt-[110px] pb-20">
+      <div className={`relative z-10 w-full mx-auto px-4 pt-[110px] pb-20 ${
+        decision ? "max-w-none xl:px-10 2xl:px-16" : "max-w-5xl"
+      }`}>
         {!decision ? (
           <ResearchLoader
             company={companyName}

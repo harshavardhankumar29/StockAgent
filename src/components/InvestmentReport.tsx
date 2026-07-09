@@ -210,16 +210,13 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
     // ignore
   }
 
-  const primaryMetrics = [
-    { label: "P/E Ratio", value: data.keyMetrics?.peRatio },
-    { label: "Revenue Growth", value: data.keyMetrics?.revenueGrowth },
-    { label: "Profit Margin", value: data.keyMetrics?.profitMargin },
-    { label: "Current Price", value: data.keyMetrics?.currentPrice },
-  ];
-
-  const secondaryMetrics = [
+  const allMetrics = [
+    { label: "Current Price", value: data.keyMetrics?.currentPrice, isPrimary: true },
+    { label: "Market Cap", value: data.keyMetrics?.marketCap, isPrimary: true },
+    { label: "P/E Ratio", value: data.keyMetrics?.peRatio, isPrimary: true },
     { label: "Forward P/E", value: data.keyMetrics?.forwardPE },
-    { label: "Market Cap", value: data.keyMetrics?.marketCap },
+    { label: "Revenue Growth", value: data.keyMetrics?.revenueGrowth, isPrimary: true },
+    { label: "Profit Margin", value: data.keyMetrics?.profitMargin },
     { label: "Debt/Equity", value: data.keyMetrics?.debtToEquity },
     { label: "ROE", value: data.keyMetrics?.returnOnEquity },
     { label: "Free Cash Flow", value: data.keyMetrics?.freeCashFlow },
@@ -229,10 +226,10 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
   ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-8 max-w-7xl mx-auto px-4 sm:px-6 animate-fade-in print-container">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 w-full animate-fade-in print-container">
       
       {/* Left Column: Report Details */}
-      <div className="lg:col-span-8 space-y-6">
+      <div className="lg:col-span-8 xl:col-span-9 space-y-5">
         
         {/* Hero Verdict Card */}
         <div
@@ -363,9 +360,9 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center">
               <TrendingUp className="w-3.5 h-3.5 text-cyan mr-1.5" /> 90-Day Stock Price Trend
             </h3>
-            <div className="relative w-full overflow-x-auto">
+            <div className="relative w-full overflow-hidden">
               <svg
-                className="w-full h-auto min-w-[640px]"
+                className="w-full h-auto"
                 viewBox={`0 0 ${svgWidth} ${svgHeight}`}
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
@@ -538,38 +535,25 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
           </SpotlightCard>
         )}
 
-        {/* Primary Financial Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {primaryMetrics.map((m) => (
+        {/* Key Statistics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          {allMetrics.map((m) => (
             <SpotlightCard
               key={m.label}
-              spotlightColor="rgba(6, 182, 212, 0.08)"
-              className="bg-surface/60 border border-border p-4 rounded-xl hover:border-border-hover transition-all duration-300 print:bg-white print:text-black print:border-slate-300"
+              spotlightColor={m.isPrimary ? "rgba(16, 185, 129, 0.08)" : "rgba(6, 182, 212, 0.05)"}
+              className={`border border-border p-3.5 rounded-xl transition-all duration-300 print:bg-white print:text-black print:border-slate-300 ${
+                m.isPrimary ? "bg-surface/80" : "bg-surface/40"
+              }`}
             >
-              <span className="text-[9px] uppercase tracking-wider text-slate-600 font-semibold block mb-1">
+              <span className="text-[8px] uppercase tracking-wider text-slate-500 font-bold block mb-1">
                 {m.label}
               </span>
-              <p className="text-xl font-mono font-bold text-white print:text-black">
+              <p className={`font-mono font-bold text-white print:text-black ${
+                m.isPrimary ? "text-lg" : "text-sm"
+              }`}>
                 {m.value || "N/A"}
               </p>
             </SpotlightCard>
-          ))}
-        </div>
-
-        {/* Secondary Financial Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {secondaryMetrics.map((m) => (
-            <div
-              key={m.label}
-              className="bg-surface/40 border border-border/50 px-3 py-2.5 rounded-lg print:border-slate-200"
-            >
-              <span className="text-[8px] uppercase tracking-wider text-slate-600 font-semibold block mb-0.5">
-                {m.label}
-              </span>
-              <p className="text-xs font-mono font-medium text-slate-300 print:text-slate-800">
-                {m.value || "N/A"}
-              </p>
-            </div>
           ))}
         </div>
 
@@ -685,7 +669,7 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
       </div>
 
       {/* Right Column: Sticky Chat Sidebar + Actions */}
-      <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-[100px] self-start print:hidden">
+      <div className="lg:col-span-4 xl:col-span-3 space-y-5 lg:sticky lg:top-[90px] self-start print:hidden">
         
         {/* Follow-up Interactive Chat */}
         {data.id && (
