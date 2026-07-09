@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Search, ArrowRight, Paperclip, Loader2, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Search, ArrowRight, Paperclip, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import DecryptedText from "./reactbits/DecryptedText";
 import ShinyText from "./reactbits/ShinyText";
 

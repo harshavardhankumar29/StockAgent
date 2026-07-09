@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, CheckCircle2, AlertCircle, TrendingUp, Zap, HelpCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Zap } from "lucide-react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 
 const SoftAurora = dynamic(() => import("@/components/reactbits/SoftAurora"), { ssr: false });

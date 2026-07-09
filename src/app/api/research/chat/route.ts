@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Load original research report from SQLite
+    // Load original research report from database
     const record = await prisma.researchHistory.findUnique({
       where: { id: historyId },
     });

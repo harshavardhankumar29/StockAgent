@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, BarChart3, Shield, AlertTriangle, Loader2, Check, Plus, Star, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Shield, AlertTriangle, Loader2, Plus, Star, Zap } from "lucide-react";
 import dynamic from "next/dynamic";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 
