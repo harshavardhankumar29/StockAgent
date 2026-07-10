@@ -196,10 +196,10 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
 
   const pathD = points.length
     ? `M ${points[0].x} ${points[0].y} ` +
-      points
-        .slice(1)
-        .map((p) => `L ${p.x} ${p.y}`)
-        .join(" ")
+    points
+      .slice(1)
+      .map((p) => `L ${p.x} ${p.y}`)
+      .join(" ")
     : "";
 
   const areaD = points.length
@@ -231,17 +231,16 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 w-full animate-fade-in print-container">
-      
+
       {/* Left Column: Report Details */}
       <div className="lg:col-span-8 xl:col-span-9 space-y-5">
-        
+
         {/* Hero Verdict Card */}
         <div
-          className={`relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br print:border print:p-4 ${
-            isInvest
+          className={`relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-br print:border print:p-4 ${isInvest
               ? "from-emerald/20 via-transparent to-cyan/10 print:border-emerald"
               : "from-crimson/20 via-transparent to-orange-500/10 print:border-crimson"
-          }`}
+            }`}
         >
           <SpotlightCard
             spotlightColor={isInvest ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)"}
@@ -256,23 +255,21 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
                     <TrendingDown className="text-crimson w-4 h-4 print:text-red-600" />
                   )}
                   <span
-                    className={`font-mono text-[10px] uppercase tracking-[0.15em] font-bold ${
-                      isInvest ? "text-emerald" : "text-crimson"
-                    }`}
+                    className={`font-mono text-[10px] uppercase tracking-[0.15em] font-bold ${isInvest ? "text-emerald" : "text-crimson"
+                      }`}
                   >
                     Final Verdict ({data.ticker})
                   </span>
                 </div>
-                
+
                 {/* Watchlist Button */}
                 <button
                   onClick={handleWatchlistToggle}
                   disabled={isWatchlistLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all duration-300 border cursor-pointer hover:scale-105 active:scale-95 print:hidden ${
-                    isWatchlisted
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-mono font-bold uppercase transition-all duration-300 border cursor-pointer hover:scale-105 active:scale-95 print:hidden ${isWatchlisted
                       ? "bg-emerald/10 border-emerald/30 text-emerald"
                       : "bg-white/[0.02] border-border text-slate-400 hover:text-white"
-                  }`}
+                    }`}
                 >
                   {isWatchlistLoading ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -287,11 +284,10 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
                   )}
                 </button>
               </div>
-              
+
               <h2
-                className={`text-5xl md:text-6xl font-black tracking-tighter mb-3 ${
-                  isInvest ? "text-emerald print:text-green-600" : "text-crimson print:text-red-600"
-                }`}
+                className={`text-5xl md:text-6xl font-black tracking-tighter mb-3 ${isInvest ? "text-emerald print:text-green-600" : "text-crimson print:text-red-600"
+                  }`}
               >
                 {data.decision}
               </h2>
@@ -545,16 +541,14 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
             <SpotlightCard
               key={m.label}
               spotlightColor={m.isPrimary ? "rgba(16, 185, 129, 0.08)" : "rgba(6, 182, 212, 0.05)"}
-              className={`border border-border p-3.5 rounded-xl transition-all duration-300 print:bg-white print:text-black print:border-slate-300 ${
-                m.isPrimary ? "bg-surface/80" : "bg-surface/40"
-              }`}
+              className={`border border-border p-3.5 rounded-xl transition-all duration-300 print:bg-white print:text-black print:border-slate-300 ${m.isPrimary ? "bg-surface/80" : "bg-surface/40"
+                }`}
             >
               <span className="text-[8px] uppercase tracking-wider text-slate-500 font-bold block mb-1">
                 {m.label}
               </span>
-              <p className={`font-mono font-bold text-white print:text-black ${
-                m.isPrimary ? "text-lg" : "text-sm"
-              }`}>
+              <p className={`font-mono font-bold text-white print:text-black ${m.isPrimary ? "text-lg" : "text-sm"
+                }`}>
                 {m.value || "N/A"}
               </p>
             </SpotlightCard>
@@ -674,7 +668,7 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
 
       {/* Right Column: Sticky Chat Sidebar + Actions */}
       <div className="lg:col-span-4 xl:col-span-3 space-y-5 lg:sticky lg:top-[90px] self-start print:hidden">
-        
+
         {/* Follow-up Interactive Chat */}
         {data.id && (
           <SpotlightCard
@@ -709,11 +703,10 @@ export default function InvestmentReport({ data, onReset }: InvestmentReportProp
                     className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-xl px-3 py-2 leading-relaxed ${
-                        m.role === "user"
+                      className={`max-w-[80%] rounded-xl px-3 py-2 leading-relaxed ${m.role === "user"
                           ? "bg-gradient-to-r from-emerald/20 to-cyan/20 border border-cyan/20 text-white"
                           : "bg-white/[0.02] border border-border/50 text-slate-300"
-                      }`}
+                        }`}
                     >
                       <p className="whitespace-pre-wrap">{m.content || "..."}</p>
                     </div>
