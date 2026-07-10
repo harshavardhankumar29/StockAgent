@@ -39,11 +39,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { companyName, uploadedContextId } = await request.json();
+  let companyName = "";
+  let uploadedContextId = "";
+  try {
+    const body = await request.json();
+    companyName = body.companyName;
+    uploadedContextId = body.uploadedContextId;
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON request body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if (!companyName) {
     return new Response(JSON.stringify({ error: "Company name required" }), {
       status: 400,
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -222,13 +234,21 @@ export async function POST(request: NextRequest) {
         }
 
         sendEvent("complete", { message: "Research complete!" });
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // ignore if already closed
+        }
       } catch (error: unknown) {
         console.error("❌ Research pipeline error:", error);
         const errorMessage =
           error instanceof Error ? error.message : "Research failed";
         sendEvent("error", { message: errorMessage });
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // ignore if already closed
+        }
       }
     },
   });

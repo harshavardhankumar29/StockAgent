@@ -699,12 +699,47 @@ Provide your investment decision. The decision must be either INVEST or PASS. Th
       break;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
+      
+      // Attempt 1: Recover from failed_generation JSON in the Groq error response
+      const errorObj = err as any;
+      const failedGen = errorObj?.error?.failed_generation || errorObj?.failed_generation;
+      if (failedGen && typeof failedGen === "string") {
+        const jsonStart = failedGen.indexOf("{");
+        const jsonEnd = failedGen.lastIndexOf("}");
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          try {
+            qualitative = JSON.parse(failedGen.substring(jsonStart, jsonEnd + 1));
+            console.log("💾 Recovered structured output from failed_generation JSON!");
+            break;
+          } catch {
+            // fail silently, proceed to next recovery option
+          }
+        }
+      }
+
       if ((msg.includes("429") || msg.includes("rate_limit")) && attempt < 3) {
         const wait = backoffMs(attempt, 5000);
         console.log(`⏳ Rate limited on structured output. Waiting ${Math.round(wait / 1000)}s...`);
         await sleep(wait);
         continue;
       }
+
+      // Attempt 2: Fallback to standard text response with manual JSON parsing
+      console.warn("⚠️ Structured output failed. Retrying with a standard text prompt and manual JSON parsing...");
+      try {
+        const textPrompt = `${prompt}\n\nYou MUST respond ONLY with a raw JSON object matching this schema. Do not output any other text, markdown blocks, or tags.\nSchema:\n{\n  "decision": "INVEST" | "PASS",\n  "confidenceScore": number,\n  "reasoning": string,\n  "bullPoints": string[],\n  "bearPoints": string[],\n  "financialHealth": string,\n  "moatStrength": string,\n  "growthProspects": string,\n  "riskLevel": string,\n  "timeHorizon": string\n}`;
+        const textResponse = await llm.invoke([new HumanMessage(textPrompt)]);
+        const rawContent = typeof textResponse.content === "string" ? textResponse.content.trim() : "";
+        const jsonStart = rawContent.indexOf("{");
+        const jsonEnd = rawContent.lastIndexOf("}");
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          qualitative = JSON.parse(rawContent.substring(jsonStart, jsonEnd + 1));
+          break;
+        }
+      } catch (fallbackErr) {
+        console.error("❌ Fallback text prompt also failed:", fallbackErr);
+      }
+
       throw err;
     }
   }

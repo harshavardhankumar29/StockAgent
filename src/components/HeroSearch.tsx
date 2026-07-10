@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, ArrowRight, Paperclip, Loader2, CheckCircle2, AlertCircle, TrendingUp } from "lucide-react";
+import { Search, ArrowRight, Loader2, X } from "lucide-react";
 import DecryptedText from "./reactbits/DecryptedText";
 import ShinyText from "./reactbits/ShinyText";
 
@@ -15,9 +15,9 @@ interface Suggestion {
 }
 
 export default function HeroSearch({ onResearch }: HeroSearchProps) {
-  const [query, setQuery] = useState("");
+  const [inputValue, setInputValue] = useState("");
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
   const [isFocused, setIsFocused] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
 
   // Suggestions state
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -25,12 +25,6 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
   const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(-1);
   const [isSuggesting, setIsSuggesting] = useState(false);
 
-  // Upload state
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,12 +37,35 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     { emoji: '💜', name: 'Meta', ticker: 'META' },
   ];
 
-  // Fetch suggestions with debouncing
+  // Helper to add tickers to list
+  const addTickers = (text: string) => {
+    const parts = text
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter((t) => t.length > 0);
+
+    setSelectedTickers((prev) => {
+      const next = [...prev];
+      parts.forEach((p) => {
+        if (!next.includes(p)) {
+          next.push(p);
+        }
+      });
+      return next;
+    });
+    setInputValue("");
+    setSuggestions([]);
+    setShowDropdown(false);
+  };
+
+  const handleRemoveTicker = (ticker: string) => {
+    setSelectedTickers((prev) => prev.filter((t) => t !== ticker));
+  };
+
+  // Fetch suggestions with debouncing based on active segment
   useEffect(() => {
-    const segments = query.split(",");
-    const activeSegment = segments[segments.length - 1].trim();
+    const activeSegment = inputValue.trim();
     
-    // Don't suggest if the active segment is empty or too short
     if (!activeSegment || activeSegment.length < 2) {
       setSuggestions([]);
       setShowDropdown(false);
@@ -73,7 +90,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     }, 250); // 250ms debounce
 
     return () => clearTimeout(delayDebounce);
-  }, [query]);
+  }, [inputValue]);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -87,41 +104,50 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
   }, []);
 
   const handleSelectSuggestion = (item: Suggestion) => {
-    const segments = query.split(",");
-    if (segments.length > 1) {
-      // Batch mode: replace active segment, append comma
-      segments[segments.length - 1] = ` ${item.symbol}`;
-      const newQuery = segments.join(",") + ", ";
-      setQuery(newQuery);
-      setSuggestions([]);
-      setShowDropdown(false);
-      // Keep focus on input
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    } else {
-      // Single mode: set query and run research
-      setQuery(item.symbol);
-      setSuggestions([]);
-      setShowDropdown(false);
-      onResearch(item.symbol);
-    }
+    addTickers(item.symbol);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeSuggestionIdx >= 0 && activeSuggestionIdx < suggestions.length) {
-      handleSelectSuggestion(suggestions[activeSuggestionIdx]);
-    } else if (query.trim()) {
+    
+    let list = [...selectedTickers];
+    if (inputValue.trim()) {
+      const parts = inputValue.split(",").map(t => t.trim().toUpperCase()).filter(Boolean);
+      parts.forEach(p => {
+        if (!list.includes(p)) list.push(p);
+      });
+      setInputValue("");
+    }
+
+    if (list.length > 0) {
       setShowDropdown(false);
-      // Clean trailing comma from query before triggering research
-      const clean = query.trim().replace(/,\s*$/, "");
-      onResearch(clean);
+      onResearch(list.join(","));
     }
   };
 
-  // Keyboard navigation inside dropdown
+  // Keyboard navigation inside dropdown + Backspace to delete tags
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !inputValue) {
+      e.preventDefault();
+      setSelectedTickers((prev) => prev.slice(0, -1));
+      return;
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (showDropdown && activeSuggestionIdx >= 0 && activeSuggestionIdx < suggestions.length) {
+        handleSelectSuggestion(suggestions[activeSuggestionIdx]);
+      } else if (inputValue.trim()) {
+        addTickers(inputValue);
+      } else if (selectedTickers.length > 0) {
+        onResearch(selectedTickers.join(","));
+      }
+      return;
+    }
+
     if (!showDropdown || suggestions.length === 0) return;
 
     if (e.key === "ArrowDown") {
@@ -135,91 +161,33 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
     }
   };
 
-  // File Upload Logic
-  const handleFileUpload = async (file: File) => {
-    setIsUploading(true);
-    setUploadError(null);
-    setUploadSuccess(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("/api/research/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      setUploadSuccess(`Identified: ${data.ticker}`);
-      
-      // Auto-trigger research for the extracted ticker with the linked context ID!
-      setTimeout(() => {
-        onResearch(data.ticker, data.uploadedContextId);
-      }, 1200);
-
-    } catch (err: any) {
-      console.error(err);
-      setUploadError(err.message || "Failed to analyze document.");
-    } finally {
-      setIsUploading(false);
-    }
+  const handlePopularStockClick = (ticker: string) => {
+    setSelectedTickers((prev) => {
+      if (prev.includes(ticker)) return prev;
+      return [...prev, ticker];
+    });
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) {
-      handleFileUpload(e.target.files[0]);
-    }
-  };
-
-  const handlePaperclipClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  // Drag and Drop Handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.length) {
-      handleFileUpload(e.dataTransfer.files[0]);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (val.endsWith(",")) {
+      addTickers(val.slice(0, -1));
+    } else {
+      setInputValue(val);
     }
   };
 
   return (
-    <div 
-      className={`flex flex-col items-center text-center space-y-8 p-6 rounded-3xl transition-all duration-300 w-full max-w-2xl ${
-        isDragging ? 'bg-cyan/5 border-2 border-dashed border-cyan/40 scale-102' : 'border-2 border-transparent'
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {/* Hidden File Input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        accept=".pdf,image/*"
-        className="hidden"
-      />
-
+    <div className="flex flex-col items-center text-center space-y-8 p-6 rounded-3xl w-full max-w-2xl">
       {/* Headline */}
       <div className="space-y-4">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald/5 border border-emerald/10 mb-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />
           <span className="text-[10px] uppercase tracking-widest text-emerald font-semibold font-mono">
-            Advanced Batch & Document Research
+            Advanced Batch Research
           </span>
         </div>
         <h1 className="text-5xl md:text-7xl font-black tracking-tight flex items-center justify-center gap-3 md:gap-4 text-white leading-[1.1]">
@@ -242,7 +210,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
           />
         </h1>
         <p className="text-slate-500 max-w-md mx-auto text-sm leading-relaxed">
-          Analyze single stocks, enter a comma-separated list for batch research, or upload a chart image/financial PDF context.
+          Analyze single stocks or add multiple companies to perform a comprehensive batch research.
         </p>
       </div>
 
@@ -254,21 +222,41 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
               ? 'bg-gradient-to-r from-emerald/50 via-cyan/50 to-indigo/50 shadow-[0_0_40px_rgba(16,185,129,0.12)]' 
               : 'bg-border'
           }`}>
-            <div className="flex items-center bg-surface rounded-2xl px-5 py-3.5">
-              <Search className={`mr-3 transition-colors duration-300 ${isFocused ? 'text-emerald' : 'text-slate-600'}`} size={18} />
+            <div className="flex items-center bg-surface rounded-2xl px-5 py-3.5 flex-wrap gap-2">
+              <Search className={`mr-1 transition-colors duration-300 ${isFocused ? 'text-emerald' : 'text-slate-600'} shrink-0`} size={18} />
+              
+              {/* Selected tags */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {selectedTickers.map((ticker) => (
+                  <span 
+                    key={ticker} 
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald/10 border border-emerald/20 text-emerald text-xs font-mono font-bold animate-fade-in shrink-0"
+                  >
+                    {ticker}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTicker(ticker)}
+                      className="hover:bg-emerald/20 rounded p-0.5 transition-colors cursor-pointer text-[9px] flex items-center justify-center w-3 h-3 text-emerald/70 hover:text-emerald"
+                    >
+                      <X size={8} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
               <input
                 type="text"
                 ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                value={inputValue}
+                onChange={handleInputChange}
                 onFocus={() => {
                   setIsFocused(true);
                   if (suggestions.length > 0) setShowDropdown(true);
                 }}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
-                placeholder="AAPL or AAPL, MSFT, TSLA or drag & drop files..."
-                className="bg-transparent outline-none w-full text-white placeholder:text-slate-600 text-sm font-medium"
+                placeholder={selectedTickers.length === 0 ? "Enter company name or ticker..." : "Add more..."}
+                className="bg-transparent outline-none flex-1 text-white placeholder:text-slate-600 text-sm font-medium min-w-[120px]"
               />
               
               {/* Suggestion loading spinner inside input */}
@@ -276,21 +264,22 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
                 <Loader2 className="w-4 h-4 animate-spin text-slate-500 mr-2 shrink-0" />
               )}
 
-              {/* Paperclip upload button */}
-              <button
-                type="button"
-                onClick={handlePaperclipClick}
-                disabled={isUploading}
-                title="Upload PDF document or stock chart image"
-                className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer mr-2 disabled:opacity-40"
-              >
-                <Paperclip size={16} />
-              </button>
+              {/* Add Item Button */}
+              {inputValue.trim() && (
+                <button
+                  type="button"
+                  onClick={() => addTickers(inputValue)}
+                  className="px-3 py-1.5 rounded-xl bg-cyan/10 hover:bg-cyan/20 border border-cyan/20 text-cyan text-xs font-semibold transition-all duration-200 cursor-pointer mr-2 shrink-0"
+                >
+                  + Add
+                </button>
+              )}
 
-              {query.trim() && (
+              {(selectedTickers.length > 0 || inputValue.trim()) && (
                 <button 
                   type="submit"
-                  className="p-2 rounded-xl bg-emerald/10 hover:bg-emerald/20 text-emerald transition-all duration-200 cursor-pointer"
+                  title="Start Research"
+                  className="p-2 rounded-xl bg-emerald/10 hover:bg-emerald/20 text-emerald transition-all duration-200 cursor-pointer shrink-0 animate-fade-in"
                 >
                   <ArrowRight size={14} />
                 </button>
@@ -329,28 +318,6 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
             ))}
           </div>
         )}
-
-        {/* Upload Status Feedbacks */}
-        {isUploading && (
-          <div className="mt-3 flex items-center justify-center gap-2 text-cyan font-mono text-[10px] uppercase tracking-wider animate-pulse">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Parsing file & extracting ticker symbol...</span>
-          </div>
-        )}
-
-        {uploadSuccess && (
-          <div className="mt-3 flex items-center justify-center gap-1.5 text-emerald font-mono text-[10px] uppercase tracking-wider">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{uploadSuccess}. Starting RAG-grounded research...</span>
-          </div>
-        )}
-
-        {uploadError && (
-          <div className="mt-3 flex items-center justify-center gap-1.5 text-crimson font-mono text-[10px] uppercase tracking-wider">
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span>{uploadError}</span>
-          </div>
-        )}
       </div>
 
       {/* Popular Chips */}
@@ -358,7 +325,7 @@ export default function HeroSearch({ onResearch }: HeroSearchProps) {
         {popularStocks.map((s) => (
           <button
             key={s.ticker}
-            onClick={() => onResearch(s.ticker)}
+            onClick={() => handlePopularStockClick(s.ticker)}
             className="flex items-center gap-1.5 bg-surface/60 border border-border px-3 py-1.5 rounded-full hover:border-border-hover hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
           >
             <span className="text-xs">{s.emoji}</span>
