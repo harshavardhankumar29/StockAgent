@@ -1,175 +1,159 @@
 # StockAgent.AI
 
-An AI-powered investment research agent built with **Next.js**, **LangGraph**, and **Groq**. Enter any company name, a comma-separated list of companies for batch research, or upload stock charts/earnings PDFs to get a comprehensive investment analysis with a clear INVEST or PASS verdict — backed by real financial data, news sentiment, competitive analysis, and Devil's Advocate critique.
+An AI-powered investment research agent built with **Next.js**, **LangGraph**, and **Groq**. It retrieves live financial metrics, news sentiment, and competitive analyses, performs intrinsic DCF valuations, subjects the thesis to a "Devil's Advocate" critique, and outputs structured, fully-reasoned `INVEST` or `PASS` recommendations.
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Next.js Frontend                              │
-│  HeroSearch (Drag & Drop PDFs/Images) → SSE Stream → ResearchLoader     │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │ POST /api/research (SSE)
-┌────────────────────────────────────▼────────────────────────────────────┐
-│                        LangGraph Agent Pipeline                         │
-│                                                                         │
-│  Node 0: Load Context (Upload Ingestion PDF text/Groq Vision summary)   │
-│      ↓                                                                  │
-│  Node 1: Identify Company (Yahoo Finance Ticker Search)                 │
-│      ↓                                                                  │
-│  Node 2: Financial Analysis (Yahoo Finance Stats + DCF Math)            │
-│      ↓                                                                  │
-│  Node 3: News Research (NewsAPI + Tavily + LLM Sentiment)               │
-│      ↓                                                                  │
-│  Node 4: Competitive Analysis (Tavily competitor list & metrics)        │
-│      ↓                                                                  │
-│  Node 5: Risk Assessment (Tavily + LLM)                                 │
-│      ↓                                                                  │
-│  Node 6: Devil's Advocate Critique (Counter-thesis validation)          │
-│      ↓                                                                  │
-│  Node 7: Investment Decision (Structured Output Verdict)                │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │
-┌────────────────────────────────────▼────────────────────────────────────┐
-│  Storage: Neon PostgreSQL (database)                                    │
-│  Auth: Clerk (user authentication)                                      │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+## 1. Overview
+**StockAgent.AI** is a multi-agent investment analyst. The application:
+*   **Performs Multi-Node Research Pipelines**: Connects live market data extraction with LLM reasoning.
+*   **Conducts Dual-Perspective Analysis**: Features an optimistic "Analyst" agent team balanced by an adversarial "Devil's Advocate" critique node that actively seeks out vulnerabilities in the bullish thesis.
+*   **Calculates Financial Fair Value**: Includes programmatic Cost of Equity and Discounted Cash Flow (DCF) models.
+*   **Streams Live Progress**: Employs Server-Sent Events (SSE) to update the frontend step-by-step as each agent completes its tasks.
+*   **Supports Batch Stock Analysis**: Allows research of multiple companies in parallel or sequentially.
+*   **Builds Portfolios and Watchlists**: Allows tracking mock investments, PnL, and live watchlists of starred stocks.
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Framework** | Next.js 16 (App Router, Turbopack, Suspense Boundaries) |
-| **AI Agent** | LangGraph + LangChain |
-| **LLM Engine** | Groq Llama 3.3 (70B) & Llama 3.2 Vision (11B) |
-| **Financial Data** | Yahoo Finance (free, no API key required) |
-| **Web Search** | Tavily Search API (1,000 free searches/month) |
-| **News Feed** | NewsAPI (100 free requests/day) |
-| **Database** | Neon PostgreSQL via Prisma (PrismaPg adapter) |
-| **Auth** | Clerk (Authentication & Route Middleware) |
-| **Styling** | Tailwind CSS 4 + custom animations |
-| **UI Effects** | Framer Motion, custom ReactBits components (SoftAurora, SpotlightCard) |
-
----
-
-## Key Features
-
-1. **Grounded Document Ingestion (RAG)**: Drag and drop a financial PDF (earnings report) or chart image. The text is parsed dynamically (using `pdf-parse`) or visually summarized (using Groq Vision) and fed into the decision node.
-2. **Batch Stock Research**: Enter a comma-separated list of companies (e.g. `AAPL, MSFT, TSLA`). The agent processes them sequentially to respect API rate limits, streaming progress updates to a live batch loader.
-3. **Comparison Leaderboard Dashboard**: Renders a side-by-side comparison matrix of researched companies (PE, growth, margin, moat, risk level), allowing you to star assets directly to your Watchlist or place virtual mock BUY orders.
-4. **Devil's Advocate Node**: An adversarial node that critique's the bull thesis, identifying loopholes in the model and adjusting the confidence score.
-
----
-
-## Getting Started
+## 2. How to Run It (Setup & Run Steps)
 
 ### Prerequisites
+*   Node.js 18+ installed on your system
+*   A running PostgreSQL instance (e.g., [Neon.tech](https://neon.tech/))
 
-- Node.js 18+
-- npm
-
-### 1. Clone and Install
-
+### 1. Install Dependencies
 ```bash
-git clone https://github.com/harshavardhankumar29/StockAgent.git
-cd StockAgent
 npm install
 ```
 
-### 2. Set Up Environment Variables
-
-Create a `.env.local` file for Next.js runtime:
-
+### 2. Configure Environment Variables
+Create a `.env.local` file in the root directory for Next.js runtime configurations:
 ```env
 # Clerk Authentication (https://clerk.com)
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 
-# Groq LLM (https://console.groq.com)
+# Groq LLM API Key (https://console.groq.com)
 GROQ_API_KEY=gsk_...
 
-# Tavily Search (https://app.tavily.com)
+# Tavily Search API Key (https://tavily.com)
 TAVILY_API_KEY=tvly-...
 
-# NewsAPI (https://newsapi.org/register)
+# NewsAPI Key (https://newsapi.org)
 NEWS_API_KEY=...
-
-# Alpha Vantage (https://www.alphavantage.co/support/#api-key) — OPTIONAL
-ALPHA_VANTAGE_API_KEY=...
 ```
 
-Create a `.env` file in the root for Prisma build config:
-
+Create a `.env` file in the root directory for Prisma migration configurations:
 ```env
+# Database connection string
 DATABASE_URL="postgresql://neondb_owner:npg_...aws.neon.tech/neondb?sslmode=require"
 ```
 
-### 3. Synchronize Database Schema
-
-Sync the Prisma models (Prisma Pg adapter) with your database instance:
-
+### 3. Initialize the Database
+Sync the PostgreSQL database schema using Prisma:
 ```bash
 npx prisma db push
 npx prisma generate
 ```
 
-### 4. Run the Dev Server
-
+### 4. Start the Application
+Run the Next.js development server:
 ```bash
 npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) to start researching.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## Project Structure
+## 3. How It Works (Approach & Architecture)
+
+The system is built on a modular state machine architecture using **LangGraph** to coordinate multiple specialized agent nodes.
 
 ```
-src/
-├── app/
-│   ├── api/
-│   │   ├── research/
-│   │   │   ├── route.ts         # SSE streaming research endpoint
-│   │   │   ├── batch/route.ts   # Sequential batch research endpoint
-│   │   │   └── upload/route.ts  # PDF text & Groq Vision file uploads
-│   │   ├── history/route.ts     # Saved research reports CRUD
-│   │   ├── portfolio/route.ts   # Virtual portfolio orders
-│   │   └── watchlist/route.ts   # Watchlist stars and real-time feeds
-│   ├── portfolio/               # Holdings & total PnL view
-│   ├── watchlist/               # Starred tickers feed
-│   ├── research/
-│   │   ├── [company]/           # Single company analysis & report
-│   │   ├── batch/               # Live batch research loader screen
-│   │   └── compare/             # Leaderboard comparison matrix
-│   └── page.tsx                 # Home screen search
-├── components/
-│   ├── HeroSearch.tsx           # Drag-and-drop file upload search bar
-│   ├── InvestmentReport.tsx     # Custom SVG charting, critique & chat
-│   └── reactbits/               # Matte cards & animated UI layout
-├── lib/
-│   ├── agent/
-│   │   ├── graph.ts             # LangGraph state machine (8 nodes)
-│   │   └── schemas.ts           # Zod structured outputs
-│   └── db.ts                    # PostgreSQL Prisma Client
-└── .npmrc                       # Peer dependency config for Next 16/React 19
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Next.js Frontend                              │
+│         Tag-Input Search Bar  ──►  SSE Stream  ──►  ResearchLoader       │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ POST /api/research
+┌────────────────────────────────────▼────────────────────────────────────┐
+│                        LangGraph Agent Pipeline                         │
+│                                                                         │
+│  Node 0: Load Context (Ingest optional PDF/Image research attachments)  │
+│      │                                                                  │
+│  Node 1: Identify Company (Yahoo Finance Ticker Search & Validation)   │
+│      │                                                                  │
+│  Node 2: Financial Research (Yahoo Finance Data Fetch + DCF Valuation)  │
+│      │                                                                  │
+│  Node 3: News Research (NewsAPI + Tavily Live Sentiment Extraction)     │
+│      │                                                                  │
+│  Node 4: Competitive Analysis (Competitor identification & metrics)     │
+│      │                                                                  │
+│  Node 5: Risk Assessment ( हेडविंड / Headwind & regulatory evaluation)   │
+│      │                                                                  │
+│  Node 6: Devil's Advocate Critique (Bullish counter-thesis critique)    │
+│      │                                                                  │
+│  Node 7: Investment Decision (Structured INVEST/PASS verdict generation) │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Node Mechanics:
+1.  **Node 0 (Load Context)**: Pulls user-uploaded document context if present.
+2.  **Node 1 (Identify Company)**: Searches Yahoo Finance to resolve company queries (e.g. "Apple") to precise tickers (e.g. `AAPL`).
+3.  **Node 2 (Financial Research)**: Pulls statistics (P/E ratio, profit margins, growth rates) and runs a DCF calculator based on WACC.
+4.  **Node 3 (News Research)**: Scrapes Google/Bing via Tavily + NewsAPI to gauge short-term sentiment.
+5.  **Node 4 (Competitive Analysis)**: Aggregates valuation metrics (P/E, Market Cap) for the top three competitors.
+6.  **Node 5 (Risk Assessment)**: Extracts macroeconomic, regulatory, and financial risks.
+7.  **Node 6 (Devil's Advocate)**: Takes all bullish research gathered so far and writes a harsh, skeptical critique of the stock.
+8.  **Node 7 (Decision)**: Weighs the bullish research against the Devil's Advocate critique to produce a structured JSON decision.
+
 ---
 
-## Production Deployment Notes (Vercel)
+## 4. Key Decisions & Trade-offs
 
-- **Peer Dependency Resolution**: Ensure a `.npmrc` file is committed with `legacy-peer-deps=true` to prevent dependency conflicts during Vercel's installation process.
-- **Build Step**: The build command is updated in `package.json` to `"prisma generate && next build"` to ensure the Prisma Client is generated inside the serverless runtime before Next compiles the pages.
-- **Database URL**: Set the `DATABASE_URL` environment variable inside Vercel's environment settings.
+*   **Server-Sent Events (SSE) vs WebSockets**: We chose Next.js Route Handlers streaming via SSE. It uses standard HTTP and doesn't require maintaining a stateful WebSocket server infrastructure, making the app highly serverless-compatible.
+*   **LangGraph State Management vs Freeform Chains**: LangGraph enforces a strict state model. This guarantees that financial data, news summaries, and risk analyses are properly aggregated in a single state container before the decision is reached, preventing AI hallucinations.
+*   **Adversarial Critic (Devil's Advocate)**: Standard LLMs suffer from positive confirmation bias. By forcing a dedicated critique node, we ensure every `INVEST` decision is balanced by real skepticism, resulting in lower, realistic confidence scores.
+*   **Structured Output Fallbacks**: Groq's tool-calling functionality can occasionally throw `tool_use_failed` errors. We implemented a robust fallback in Node 6 that catches these errors, attempts to extract JSON from the error's `failed_generation` field, and falls back to a standard text completion parsed manually.
+*   **DCF Safety Floors**: To prevent division-by-zero or negative intrinsic valuations (common with low-beta or negative-beta stocks on Yahoo Finance), we implemented a floor on the Weighted Average Cost of Capital (WACC), enforcing a minimum discount rate.
 
 ---
 
-## License
+## 5. Example Runs
 
-MIT
+### Example 1: Apple Inc. (`AAPL`)
+*   **Verdict**: `INVEST`
+*   **Confidence Score**: `65/100` (decreased due to critique)
+*   **Reasoning**: Apple boasts outstanding profitability, a wide competitive moat, and strong brand loyalty. However, the confidence score is moderated because of EU regulatory disputes, high market valuation, and potential antitrust fines.
+*   **Bull Points**: Strong brand loyalty, healthy profit margins (27.15%), stable revenue growth.
+*   **Bear Points**: Regulatory scrutiny, high premium valuation, legal challenges.
+
+### Example 2: Tesla Inc. (`TSLA`)
+*   **Verdict**: `PASS`
+*   **Confidence Score**: `60/100`
+*   **Reasoning**: Despite strong vehicle delivery performance, TSLA's low profit margin (3.95%), massive premium valuation (P/E ~370x), and aggressive scale/cost competition from BYD make it a pass at current prices.
+*   **Bull Points**: Advanced software/battery technology, positive EV adoption trends.
+*   **Bear Points**: Low current profit margins, regulatory probes, extreme competition.
+
+### Example 3: NVIDIA Corporation (`NVDA`)
+*   **Verdict**: `INVEST`
+*   **Confidence Score**: `70/100`
+*   **Reasoning**: NVIDIA maintains absolute dominance in the AI GPU market and exhibits phenomenal profitability (62% margin). Export controls and high market concentration represent risks, but do not override the secular AI trend.
+*   **Bull Points**: High profit margin, dominant GPU market share, analyst buy recommendations.
+*   **Bear Points**: Geopolitical export restrictions, market concentration.
+
+---
+
+## 6. What We Would Improve with More Time
+1.  **Background Queue Handler**: Use Inngest or BullMQ to handle long-running research tasks asynchronously. Next.js serverless functions have execution duration limits (usually 10s-30s on free plans).
+2.  **RAG Enhancements**: Add chunking and vector storage (using pgvector) to perform semantic search over multiple uploaded 10-K PDFs instead of simple string truncation.
+3.  **Brokerage Integration**: Link live paper-trading accounts to allow automated execution of mock buy/sell orders.
+4.  **Multi-Modal Chart Reading**: Ingest stock chart images and use Vision LLMs to perform technical analysis (support, resistance, pattern indicators).
+
+---
+
+## 7. Transcript Logs (Bonus Points)
+To review the complete agent pairing history, including prompt-response details, please see:
+*   [llm_chat_history.md](file:///Users/harsha/Desktop/StockAgent/llm_chat_history.md)
+
+---
+*Disclaimer: Not financial advice. For educational purposes only.*
